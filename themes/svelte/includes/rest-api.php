@@ -1,5 +1,4 @@
 <?php
-
 class App_API_Endopoints {
 	private $filters;
 
@@ -11,6 +10,18 @@ class App_API_Endopoints {
 					'callback' => array( $this, 'get_tasks' ),
 					'permission_callback' => '__return_true',
 				) );
+
+				register_rest_route( 'app', '/register/', array(
+					'methods'  => 'POST',
+					'callback' => array( $this, 'create_user' ),
+					'permission_callback' => '__return_true',
+				) );
+
+				register_rest_route( 'app', '/tasks/', array(
+					'methods'  => 'POST',
+					'callback' => array( $this, 'add_task' ),
+					'permission_callback' => '__return_true',
+				) );
 			} );
 
 			$this->filters = [
@@ -20,9 +31,16 @@ class App_API_Endopoints {
 	}
 
 	function get_tasks() {
+		if ( ! is_user_logged_in() ) {
+			return;
+		}
+
+		$id = get_current_user_id();
+
 		$tasks = new WP_Query( [
 			'post_type' => 'app_task',
 			'posts_per_page' => -1,
+			'author' => $id,
 		] );
 
 		$tasks = array_map( function( $task ) {
@@ -33,7 +51,68 @@ class App_API_Endopoints {
 			];
 		}, $tasks->posts );
 
+		if ( empty( $tasks ) ) {
+			return [
+				'loading' => false,
+				'errors' => "Error!!sa",
+			];
+		}
+
 		return $tasks;
+	}
+
+	function create_user( $atts ) {
+		$userinfo = $atts->get_body();
+
+		if ( empty( $userinfo ) ) {
+			return [];
+		}
+
+		$userinfo = json_decode( $userinfo, true );
+
+		$user_id = wp_insert_user( [
+			'user_pass' 	=> $userinfo['password'],
+			'user_login' 	=> $userinfo['username'],
+			'user_nicename' => $userinfo['username'],
+			'user_email' 	=> $userinfo['email'],
+			'role'   		=> 'editor',
+		] );
+
+		if ( is_wp_error( $user_id ) ) {
+			return new WP_REST_Response( [ 'message' => array_values( $user_id->errors )[0] ], 403 );
+		}
+
+		$token = app_generate_token( $user_id );
+
+		return [
+			'token' 			=> $token,
+			'user_display_name' => $userinfo['username'],
+			'user_email' 		=> $userinfo['email'],
+			'user_nicename' 	=> $userinfo['username'],
+		];
+	}
+
+	function add_task( $atts ) {
+		$params = json_decode( $atts->get_body(), true );
+
+		if ( isset( $params['task'] ) && isset( $params['user'] ) ) {
+			if ( isset( $params['user']['isLogged'] ) && $params['user']['isLogged'] === true ) {
+				$username = $params['user']['username'];
+				$task 	  = $params['task'];
+
+				$user_id = get_user_by( 'login', $username );
+
+				$task_id = wp_insert_post( [
+					'post_type' 	=> 'app_task',
+					'post_status' 	=> 'publish',
+					'post_title' 	=> $task['title'],
+					'post_content' 	=> $task['content'],
+					'post_author'  	=> $user_id->ID,
+				] );
+			}
+		}
+		
+		return $this->get_tasks();
 	}
 }
 

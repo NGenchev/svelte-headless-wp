@@ -26,5 +26,5 @@ register_post_type( 'app_task', array(
 	),
 	'query_var' => true,
 	'menu_icon' => 'dashicons-list-view',
-	'supports' => array( 'title', 'editor' ),
+	'supports' => array( 'title', 'editor', 'author' ),
 ) );

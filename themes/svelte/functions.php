@@ -1,4 +1,6 @@
 <?php
+use Firebase\JWT\JWT;
+
 define( 'APP_THEME_DIR', dirname( __FILE__ ) . DIRECTORY_SEPARATOR );
 
 # Enqueue JS and CSS assets on the front-end
@@ -136,4 +138,35 @@ function app_is_gutenberg_editor() {
 	}
 
 	return false;
+}
+
+function app_generate_token( $user_id ) {
+	$secret_key = defined('JWT_AUTH_SECRET_KEY') ? JWT_AUTH_SECRET_KEY : false;
+
+	$issuedAt = time();
+	$notBefore = apply_filters('jwt_auth_not_before', $issuedAt, $issuedAt);
+	$expire = apply_filters('jwt_auth_expire', $issuedAt + (DAY_IN_SECONDS * 7), $issuedAt);
+
+	$token = array(
+		'iss' => get_bloginfo('url'),
+		'iat' => $issuedAt,
+		'nbf' => $notBefore,
+		'exp' => $expire,
+		'data' => array(
+			'user' => array(
+				'id' => $user_id,
+			),
+		),
+	);
+
+	/** Let the user modify the token data before the sign. */
+	$user = get_user_by( 'id', $user_id );
+
+	$token = JWT::encode(
+		apply_filters('jwt_auth_token_before_sign', $token, $user),
+		$secret_key,
+		apply_filters('jwt_auth_algorithm', 'HS256')
+	);
+
+	return $token;
 }
