@@ -5,12 +5,6 @@ class App_API_Endopoints {
 	function __construct( $is_api_call = true ) {
 		if ( $is_api_call ) {
 			add_action( 'rest_api_init', function () {
-				register_rest_route( 'app', '/tasks/', array(
-					'methods'  => 'GET',
-					'callback' => array( $this, 'get_tasks' ),
-					'permission_callback' => '__return_true',
-				) );
-
 				register_rest_route( 'app', '/register/', array(
 					'methods'  => 'POST',
 					'callback' => array( $this, 'create_user' ),
@@ -18,8 +12,20 @@ class App_API_Endopoints {
 				) );
 
 				register_rest_route( 'app', '/tasks/', array(
+					'methods'  => 'GET',
+					'callback' => array( $this, 'get_tasks' ),
+					'permission_callback' => '__return_true',
+				) );
+
+				register_rest_route( 'app', '/tasks/', array(
 					'methods'  => 'POST',
 					'callback' => array( $this, 'add_task' ),
+					'permission_callback' => '__return_true',
+				) );
+
+				register_rest_route( 'app', '/tasks/', array(
+					'methods'  => 'DELETE',
+					'callback' => array( $this, 'remove_task' ),
 					'permission_callback' => '__return_true',
 				) );
 			} );
@@ -38,23 +44,23 @@ class App_API_Endopoints {
 		$id = get_current_user_id();
 
 		$tasks = new WP_Query( [
-			'post_type' => 'app_task',
+			'post_type' 	 => 'app_task',
 			'posts_per_page' => -1,
-			'author' => $id,
+			'author' 		 => $id,
 		] );
 
 		$tasks = array_map( function( $task ) {
 			return [
-				'id' => $task->ID,
-				'title' => $task->post_title,
-				'content' => $task->post_content
+				'id' 		=> $task->ID,
+				'title' 	=> $task->post_title,
+				'content' 	=> $task->post_content
 			];
 		}, $tasks->posts );
 
 		if ( empty( $tasks ) ) {
 			return [
 				'loading' => false,
-				'errors' => "Error!!sa",
+				'errors' => "No More Tasks",
 			];
 		}
 
@@ -112,6 +118,23 @@ class App_API_Endopoints {
 			}
 		}
 		
+		return $this->get_tasks();
+	}
+
+	function remove_task( $atts ) {
+		global $wpdb;
+
+		$params = json_decode( $atts->get_body(), true );
+
+		if ( isset( $params['task'] ) && isset( $params['user'] ) ) {
+			if ( isset( $params['user']['isLogged'] ) && $params['user']['isLogged'] === true ) {
+				$task 	  = (int) $params['task'];
+				$user_id  = get_current_user_id();
+
+				$result = $wpdb->delete( $wpdb->posts, [ 'post_author' => $user_id, 'ID' => $task ], [ '%d', '%d' ] );
+			}
+		}
+
 		return $this->get_tasks();
 	}
 }
