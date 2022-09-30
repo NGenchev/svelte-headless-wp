@@ -1,7 +1,5 @@
 <?php
 class App_API_Endopoints {
-	private $filters;
-
 	function __construct( $is_api_call = true ) {
 		if ( $is_api_call ) {
 			add_action( 'rest_api_init', function () {
@@ -24,15 +22,17 @@ class App_API_Endopoints {
 				) );
 
 				register_rest_route( 'app', '/tasks/', array(
+					'methods'  => 'PATCH',
+					'callback' => array( $this, 'edit_task' ),
+					'permission_callback' => '__return_true',
+				) );
+
+				register_rest_route( 'app', '/tasks/', array(
 					'methods'  => 'DELETE',
 					'callback' => array( $this, 'remove_task' ),
 					'permission_callback' => '__return_true',
 				) );
 			} );
-
-			$this->filters = [
-				'page' => 1,
-			];
 		}
 	}
 
@@ -53,7 +53,8 @@ class App_API_Endopoints {
 			return [
 				'id' 		=> $task->ID,
 				'title' 	=> $task->post_title,
-				'content' 	=> $task->post_content
+				'content' 	=> $task->post_content,
+				'isDone' 	=> (bool) get_post_meta( $task->ID, '_app_is_task_done', true ),
 			];
 		}, $tasks->posts );
 
@@ -108,13 +109,41 @@ class App_API_Endopoints {
 
 				$user_id = get_user_by( 'login', $username );
 
-				$task_id = wp_insert_post( [
+				wp_insert_post( [
 					'post_type' 	=> 'app_task',
 					'post_status' 	=> 'publish',
 					'post_title' 	=> $task['title'],
 					'post_content' 	=> $task['content'],
 					'post_author'  	=> $user_id->ID,
 				] );
+			}
+		}
+		
+		return $this->get_tasks();
+	}
+
+	function edit_task( $atts ) {
+		$params = json_decode( $atts->get_body(), true );
+
+		if ( isset( $params['task'] ) && isset( $params['user'] ) ) {
+			if ( isset( $params['user']['isLogged'] ) && $params['user']['isLogged'] === true ) {
+				$username = $params['user']['username'];
+				$task 	  = $params['task'];
+
+				$user_id 	= get_user_by( 'login', $username );
+				$real_task 	= get_post( $task['id'] );
+
+				if ( $real_task->post_author == $user_id->ID ) {
+					$task_id = wp_update_post( [
+						'ID' 			=> $task['id'],
+						'post_title' 	=> $task['title'],
+						'post_content' 	=> $task['content'],
+					] );
+
+					if ( ! is_wp_error( $task_id ) ) {
+						update_post_meta( $task_id, '_app_is_task_done', $task['isDone'] );
+					}
+				}
 			}
 		}
 		
@@ -131,7 +160,7 @@ class App_API_Endopoints {
 				$task 	  = (int) $params['task'];
 				$user_id  = get_current_user_id();
 
-				$result = $wpdb->delete( $wpdb->posts, [ 'post_author' => $user_id, 'ID' => $task ], [ '%d', '%d' ] );
+				$wpdb->delete( $wpdb->posts, [ 'post_author' => $user_id, 'ID' => $task ], [ '%d', '%d' ] );
 			}
 		}
 
